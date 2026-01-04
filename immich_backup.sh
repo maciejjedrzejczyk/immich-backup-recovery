@@ -6,8 +6,21 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
-ENV_FILE="${ENV_FILE:-.env}"
+COMPOSE_FILE="${COMPOSE_FILE:-}"
+ENV_FILE="${ENV_FILE:-}"
+INTERACTIVE_MODE=false
+
+# Prompt for configuration files
+prompt_for_files() {
+    echo ""
+    echo "=== Configuration File Selection ==="
+    
+    read -p "Docker Compose file name [docker-compose.yml]: " compose_input
+    COMPOSE_FILE="${compose_input:-docker-compose.yml}"
+    
+    read -p "Environment file name [.env]: " env_input
+    ENV_FILE="${env_input:-.env}"
+}
 
 # Colors for output
 RED='\033[0;31m'
@@ -413,7 +426,7 @@ perform_restore() {
 
 # Show usage
 show_usage() {
-    echo "Usage: $0 <mode> <location>"
+    echo "Usage: $0 [OPTIONS] <mode> <location>"
     echo ""
     echo "Modes:"
     echo "  backup   - Create backup of Immich data"
@@ -423,25 +436,106 @@ show_usage() {
     echo "  location - For backup: destination directory"
     echo "           - For restore: backup archive (.tar.gz) or directory"
     echo ""
+    echo "Options:"
+    echo "  -i, --interactive       Interactive mode to specify file names"
+    echo "  -c, --compose-file FILE Docker compose file (default: docker-compose.yml)"
+    echo "  -e, --env-file FILE     Environment file (default: .env)"
+    echo "  -h, --help              Show this help message"
+    echo ""
     echo "Environment variables:"
-    echo "  COMPOSE_FILE - Docker compose file (default: docker-compose.yml)"
-    echo "  ENV_FILE     - Environment file (default: .env)"
+    echo "  COMPOSE_FILE - Docker compose file (overridden by -c option)"
+    echo "  ENV_FILE     - Environment file (overridden by -e option)"
     echo ""
     echo "Examples:"
+    echo "  # Non-interactive with defaults"
     echo "  $0 backup /path/to/backup/destination"
-    echo "  $0 restore /path/to/backup/immich_backup_20240101_120000.tar.gz"
-    echo "  $0 restore /path/to/backup/immich_backup_20240101_120000"
+    echo ""
+    echo "  # Non-interactive with custom files"
+    echo "  $0 -c compose.prod.yml -e .env.prod backup /backup/dest"
+    echo ""
+    echo "  # Interactive mode"
+    echo "  $0 -i"
+    echo "  $0 --interactive backup /backup/dest"
+    echo ""
+    echo "  # Using environment variables"
+    echo "  COMPOSE_FILE=compose.prod.yml ENV_FILE=.env.prod $0 backup /backup/dest"
 }
 
 # Main function
 main() {
-    if [[ $# -lt 2 ]]; then
+    # Parse command line options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -i|--interactive)
+                INTERACTIVE_MODE=true
+                shift
+                ;;
+            -c|--compose-file)
+                COMPOSE_FILE="$2"
+                shift 2
+                ;;
+            -e|--env-file)
+                ENV_FILE="$2"
+                shift 2
+                ;;
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            backup|restore)
+                MODE="$1"
+                shift
+                ;;
+            *)
+                if [[ -z "$LOCATION" ]]; then
+                    LOCATION="$1"
+                    shift
+                else
+                    log_error "Unknown argument: $1"
+                    show_usage
+                    exit 1
+                fi
+                ;;
+        esac
+    done
+    
+    # Interactive mode prompts
+    if [[ "$INTERACTIVE_MODE" == true ]]; then
+        if [[ -z "$COMPOSE_FILE" ]] || [[ -z "$ENV_FILE" ]]; then
+            prompt_for_files
+        fi
+        
+        if [[ -z "$MODE" ]]; then
+            echo ""
+            echo "Select operation mode:"
+            echo "  1. backup"
+            echo "  2. restore"
+            read -p "Enter choice [1-2]: " mode_choice
+            case "$mode_choice" in
+                1) MODE="backup" ;;
+                2) MODE="restore" ;;
+                *) log_error "Invalid choice"; exit 1 ;;
+            esac
+        fi
+        
+        if [[ -z "$LOCATION" ]]; then
+            if [[ "$MODE" == "backup" ]]; then
+                read -p "Backup destination directory: " LOCATION
+            else
+                read -p "Backup archive or directory to restore: " LOCATION
+            fi
+        fi
+    fi
+    
+    # Set defaults
+    COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
+    ENV_FILE="${ENV_FILE:-.env}"
+    
+    # Validate required arguments
+    if [[ -z "$MODE" ]] || [[ -z "$LOCATION" ]]; then
         show_usage
         exit 1
     fi
-    
-    local mode="$1"
-    local location="$2"
     
     # Change to script directory
     cd "$SCRIPT_DIR"
@@ -452,15 +546,15 @@ main() {
     # Check prerequisites
     check_prerequisites
     
-    case "$mode" in
+    case "$MODE" in
         backup)
-            perform_backup "$location"
+            perform_backup "$LOCATION"
             ;;
         restore)
-            perform_restore "$location"
+            perform_restore "$LOCATION"
             ;;
         *)
-            log_error "Invalid mode: $mode"
+            log_error "Invalid mode: $MODE"
             show_usage
             exit 1
             ;;

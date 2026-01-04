@@ -444,14 +444,62 @@ docker exec -i immich_postgres psql --dbname=postgres --username={db_username}""
             if extract_dir and os.path.exists(extract_dir):
                 shutil.rmtree(extract_dir)
 
+def prompt_for_files():
+    """Interactively prompt for compose and env file names"""
+    print("\n=== Configuration File Selection ===")
+    
+    compose_file = input(f"Docker Compose file name [docker-compose.yml]: ").strip()
+    if not compose_file:
+        compose_file = "docker-compose.yml"
+    
+    env_file = input(f"Environment file name [.env]: ").strip()
+    if not env_file:
+        env_file = ".env"
+    
+    return compose_file, env_file
+
 def main():
     parser = argparse.ArgumentParser(description="Immich Backup and Recovery Tool")
-    parser.add_argument("mode", choices=["backup", "restore"], help="Operation mode")
-    parser.add_argument("location", help="Backup location (for backup: destination directory, for restore: archive file or directory)")
-    parser.add_argument("--compose-file", default="docker-compose.yml", help="Docker compose file path")
-    parser.add_argument("--env-file", default=".env", help="Environment file path")
+    parser.add_argument("mode", nargs='?', choices=["backup", "restore"], help="Operation mode")
+    parser.add_argument("location", nargs='?', help="Backup location (for backup: destination directory, for restore: archive file or directory)")
+    parser.add_argument("--compose-file", help="Docker compose file path")
+    parser.add_argument("--env-file", help="Environment file path")
+    parser.add_argument("-i", "--interactive", action="store_true", help="Interactive mode to specify file names")
     
     args = parser.parse_args()
+    
+    # Interactive mode
+    if args.interactive or (not args.mode or not args.location):
+        if not args.compose_file or not args.env_file:
+            compose_file, env_file = prompt_for_files()
+            args.compose_file = args.compose_file or compose_file
+            args.env_file = args.env_file or env_file
+        
+        if not args.mode:
+            print("\nSelect operation mode:")
+            print("  1. backup")
+            print("  2. restore")
+            choice = input("Enter choice [1-2]: ").strip()
+            args.mode = "backup" if choice == "1" else "restore" if choice == "2" else None
+            if not args.mode:
+                print("❌ Invalid choice")
+                sys.exit(1)
+        
+        if not args.location:
+            if args.mode == "backup":
+                args.location = input("Backup destination directory: ").strip()
+            else:
+                args.location = input("Backup archive or directory to restore: ").strip()
+    
+    # Set defaults for non-interactive mode
+    if not args.compose_file:
+        args.compose_file = "docker-compose.yml"
+    if not args.env_file:
+        args.env_file = ".env"
+    
+    if not args.mode or not args.location:
+        parser.print_help()
+        sys.exit(1)
     
     try:
         tool = ImmichBackupTool(args.compose_file, args.env_file)

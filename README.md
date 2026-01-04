@@ -66,24 +66,59 @@ sudo yum install jq
 
 ## Quick Start
 
-### Backup
+### Interactive Mode
+
+Both scripts support interactive mode for easy configuration:
 
 ```bash
-# Using Python script
-./immich_backup_tool.py backup /path/to/backup/destination
+# Python script - interactive mode
+./immich_backup_tool.py -i
 
-# Using shell script
-./immich_backup.sh backup /path/to/backup/destination
+# Shell script - interactive mode
+./immich_backup.sh -i
 ```
 
-### Restore
+The interactive mode will prompt you for:
+- Docker compose file name (default: docker-compose.yml)
+- Environment file name (default: .env)
+- Operation mode (backup or restore)
+- Backup location
+
+### Non-Interactive Mode
+
+#### Backup
+
+```bash
+# Using Python script with defaults
+./immich_backup_tool.py backup /path/to/backup/destination
+
+# Using Python script with custom files
+./immich_backup_tool.py --compose-file compose.prod.yml --env-file .env.prod backup /path/to/backup/destination
+
+# Using shell script with defaults
+./immich_backup.sh backup /path/to/backup/destination
+
+# Using shell script with custom files
+./immich_backup.sh -c compose.prod.yml -e .env.prod backup /path/to/backup/destination
+
+# Using environment variables
+COMPOSE_FILE=compose.prod.yml ENV_FILE=.env.prod ./immich_backup.sh backup /path/to/backup/destination
+```
+
+#### Restore
 
 ```bash
 # Using Python script - from compressed archive
 ./immich_backup_tool.py restore /path/to/backup/immich_backup_20240101_120000.tar.gz
 
+# Using Python script with custom files
+./immich_backup_tool.py --compose-file compose.prod.yml --env-file .env.prod restore /path/to/backup/immich_backup_20240101_120000.tar.gz
+
 # Using shell script - from compressed archive
 ./immich_backup.sh restore /path/to/backup/immich_backup_20240101_120000.tar.gz
+
+# Using shell script with custom files
+./immich_backup.sh -c compose.prod.yml -e .env.prod restore /path/to/backup/immich_backup_20240101_120000.tar.gz
 
 # Both tools also support restoring from uncompressed directories (backward compatibility)
 ./immich_backup.sh restore /path/to/backup/immich_backup_20240101_120000
@@ -148,15 +183,41 @@ Both tools automatically read configuration from:
 
 ### Custom Configuration
 
-You can specify different files:
+Both tools support multiple ways to specify custom configuration files:
 
+**1. Command-line options (highest priority):**
 ```bash
 # Python script
 ./immich_backup_tool.py --compose-file custom-compose.yml --env-file custom.env backup /backup/path
 
-# Shell script (environment variables)
+# Shell script
+./immich_backup.sh -c custom-compose.yml -e custom.env backup /backup/path
+```
+
+**2. Environment variables:**
+```bash
 COMPOSE_FILE=custom-compose.yml ENV_FILE=custom.env ./immich_backup.sh backup /backup/path
 ```
+
+**3. Interactive mode:**
+```bash
+# Will prompt for file names if not specified
+./immich_backup_tool.py -i
+./immich_backup.sh -i
+```
+
+**4. Defaults:**
+- Docker Compose file: `docker-compose.yml`
+- Environment file: `.env`
+
+The tools automatically read configuration from:
+
+- **docker-compose.yml** (or custom name) - Container definitions and volume mappings
+- **.env file** (or custom name) - Environment variables including:
+  - `UPLOAD_LOCATION` - Where Immich stores uploaded files
+  - `DB_DATA_LOCATION` - PostgreSQL data directory
+  - `DB_USERNAME` - Database username (default: postgres)
+  - `IMMICH_VERSION` - Immich version tag
 
 ## What Gets Backed Up
 
